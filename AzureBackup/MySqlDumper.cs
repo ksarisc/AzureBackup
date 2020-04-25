@@ -7,27 +7,43 @@ namespace AzureBackup
 {
     public class MySqlDumper
     {
-        private static readonly string command = @"/usr/bin/mysqldump -u{0} -p {1} | gzip > {2}.sql.gz";
+        private static readonly string command = @"/usr/bin/mysqldump -u{0} -p --routines {1} | gzip > {2}.sql.gz";
         private readonly string db, user, pass;
+        private readonly StreamWriter writer;
 
-        public MySqlDumper(string database, string userName, string password)
+        public MySqlDumper(string database, string userName, string password, string logPath)
         {
+            // environment DEBIAN
+            //{/usr/bin/mysqldump}
+            // environment WINDOWS
+            //
             db = database;
             user = userName;
             pass = password;
+            writer = new StreamWriter(logPath);
         }
 
         public async Task BackupAsync(string dumpPath)
         {
             var cmd = String.Format(command, user, db,
-                    Path.Combine(dumpPath, $"{db}_{Utils.GetTimestamp()}"));
-            using (var proc = new Process())
+                    Path.Combine(dumpPath, $"{db}_{Utils.GetTimestamp()}"))
+                    .Replace("\"", "\\\"");
+            using (var proc = new Process
             {
-                proc.StartInfo = new ProcessStartInfo
+                StartInfo = new ProcessStartInfo
                 {
-                };
-                //proc.ErrorDataReceived
-                //proc.OutputDataReceived
+                    FileName = "/bin/bash",
+                    Arguments = $"-c \"{cmd}\"",
+                    RedirectStandardOutput = true,
+                    UseShellExecute = false,
+                    CreateNoWindow = true,
+                }
+            })
+            {
+                proc.ErrorDataReceived += OnErrorDataReceived;
+                proc.OutputDataReceived += OnOutputDataReceived;
+                proc.BeginOutputReadLine();
+                proc.BeginErrorReadLine();
 
                 proc.Start();
                 proc.WaitForInputIdle();
@@ -36,5 +52,15 @@ namespace AzureBackup
                 // proc.WaitForInputIdle();
             }
         } // END BackupAsync
+
+        private async void OnErrorDataReceived(object sender, DataReceivedEventArgs e)
+        {
+            await writer.WriteLineAsync($"{Utils.GetTimestamp(true)} [ERR] {e.Data}");
+        } // END OnErrorDataReceived
+
+        private async void OnOutputDataReceived(object sender, DataReceivedEventArgs e)
+        {
+            await writer.WriteLineAsync($"{Utils.GetTimestamp(true)} [STD] {e.Data}");
+        } // END OnOutputDataReceived
     }
 }
