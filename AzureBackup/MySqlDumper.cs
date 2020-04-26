@@ -42,14 +42,17 @@ namespace AzureBackup
             {
                 proc.ErrorDataReceived += OnErrorDataReceived;
                 proc.OutputDataReceived += OnOutputDataReceived;
+                proc.Start();
                 proc.BeginOutputReadLine();
                 proc.BeginErrorReadLine();
 
-                proc.Start();
                 proc.WaitForInputIdle();
                 await proc.StandardInput.WriteLineAsync(pass);
                 // proc.WaitForExit();
                 // proc.WaitForInputIdle();
+
+                proc.ErrorDataReceived -= OnErrorDataReceived;
+                proc.OutputDataReceived -= OnOutputDataReceived;
             }
         } // END BackupAsync
 
